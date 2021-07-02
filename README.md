@@ -55,7 +55,7 @@ First run any socket server daemon at any port:
 
 Then wrap this socket server in TLS:
 
-    openssl-server -key key.pem -cert cert.pem -l 127.0.0.1:8443 127.0.0.1:8080
+    openssl-server -key key.pem -cert cert.pem -b 127.0.0.1:8443 127.0.0.1:8080
 
 Connect to the TLS socket server:
 
@@ -72,7 +72,7 @@ Start with running [any webserver](https://gist.github.com/willurd/5720255) at 8
 
 Then run the TLS server at any/all interface(s) at the default HTTPS port (0.0.0.0:443), and then pipe incoming connections to the local-loopback device at the alternative HTTP port (127.0.0.1:8080).
 
-    [sudo] openssl-server -key key.pem -cert cert.pem -l 0.0.0.0:443 127.0.0.1:8080
+    [sudo] openssl-server -key key.pem -cert cert.pem -b 0.0.0.0:443 127.0.0.1:8080
 
 If the TLS-certificate is self-signed, then you must add this certificate as an exception in order to continue for testing purposes.
 For instance, to test the webserver over HTTPS, use curl:
