@@ -5,7 +5,38 @@ Modular TLS wrapper, a functional version of openssl s_server (for Linux).
 
 **NO WARRANTY, MAY CONTAIN BUGS, MEMORY LEAKS, ETC. ETC. ETC.**
 
-## Usage
+## `openssl-server --help`
+
+    Usage: openssl-server [OPTIONS] [target-address]
+    
+    Accepts incoming client sockets with TLS, and pipes the decrypted data to the
+    given target address (bidirectional). Target address defaults to 127.0.0.1, and
+    the set or default value of the bind port.
+    
+    OPTIONS
+      -cert <file>          Path to certificate file (defaults to cert.pem).
+      -key <file>           Path to key file (defaults to key.pem).
+      -b,--bind <address>   Bind to the given address (defaults to 127.0.0.1:4433).
+      -h,--help             Show this help.
+    
+    Formatting:
+      address = {host:port,host,:port,port}
+    
+    Hint:
+      Use host 0.0.0.0 for any/all interfaces (public).
+      Use host 127.0.0.1 for local-loopback only (private).
+    
+    EXAMPLES
+      Generate a self-signed certificate:
+      > openssl req -x509 -days 36500 -subj '/CN=localhost' -nodes -newkey rsa:4096 
+      -keyout key.pem -out cert.pem
+    
+      Connect with openssl-server instance (using TLS):
+      > openssl s_client -connect 127.0.0.1:4433 -quiet
+    
+    
+
+## Example: Basic usage
 
 Grab the code and compile:
 
@@ -60,36 +91,6 @@ So an additional webserver with a redirect must listen at 0.0.0.0:80.
 
 Of course, you can also simply run the webserver on the HTTP port (:80) directly, and do a conditional redirect to HTTPS (:443) in the application code (i.e. in PHP test for: `empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === "off"`).
 
-## `openssl-server --help`
-
-    Usage: openssl-server [OPTIONS] [target-address]
-    
-    Accepts incoming client sockets with TLS, and pipes the decrypted data to the
-    given target address (bidirectional). Target address defaults to 127.0.0.1, and
-    the set or default value of the bind port.
-    
-    OPTIONS
-      -cert <file>          Path to certificate file (defaults to cert.pem).
-      -key <file>           Path to key file (defaults to key.pem).
-      -b,--bind <address>   Bind to the given address (defaults to 127.0.0.1:4433).
-      -h,--help             Show this help.
-    
-    Formatting:
-      address = {host:port,host,:port,port}
-    
-    Hint:
-      Use host 0.0.0.0 for any/all interfaces (public).
-      Use host 127.0.0.1 for local-loopback only (private).
-    
-    EXAMPLES
-      Generate a self-signed certificate:
-      > openssl req -x509 -days 36500 -subj '/CN=localhost' -nodes -newkey rsa:4096 
-      -keyout key.pem -out cert.pem
-    
-      Connect with openssl-server instance (using TLS):
-      > openssl s_client -connect 127.0.0.1:4433 -quiet
-    
-    
 
 ## TODO
 
