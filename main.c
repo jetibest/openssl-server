@@ -328,7 +328,7 @@ int main(int argc, char * argv[])
 				}
 				strcpy(opts.key_file, argv[i + 1]);
 			}
-			else if(strcmp(arg, "-l") == 0 || strcmp(arg, "--listen") == 0)
+			else if(strcmp(arg, "-b") == 0 || strcmp(arg, "--bind") == 0)
 			{
 				if(i + 1 == argc)
 				{
