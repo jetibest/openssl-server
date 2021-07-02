@@ -1,9 +1,9 @@
 # openssl-server
 Modular TLS wrapper, a functional version of openssl s_server (for Linux).
 
-# DISCLAIMER: DO NOT USE
+## DISCLAIMER
 
-This software is not finished, and just proof-of-concept/draft code for what it is intended to do.
+**NO WARRANTY, MAY CONTAIN BUGS, MEMORY LEAKS, ETC. ETC. ETC.**
 
 ## Usage
 
@@ -12,7 +12,7 @@ Grab the code and compile:
     cd /tmp
     git clone https://github.com/jetibest/openssl-server
     cd openssl-server
-    ./compile.sh
+    ./compile.sh && ./install.sh
 
 Create a self-signed certificate/key files if not yet created:
 
@@ -24,11 +24,77 @@ First run any socket server daemon at any port:
 
 Then wrap this socket server in TLS:
 
-    ./openssl-server -key key.pem -cert cert.pem -p 8443 127.0.0.1:8080
+    openssl-server -key key.pem -cert cert.pem -l 127.0.0.1:8443 127.0.0.1:8080
 
 Connect to the TLS socket server:
 
     openssl s_client -connect 127.0.0.1:8443 -quiet
 
-Any data sent through this client, is encrypted with TLS at :8443, and sent to :8080.
-Similarly, any data returned by the server running at :8080 is written back to the client over the socket with TLS.
+Any data sent through this client, is encrypted with TLS at port 8443, and sent to port 8080.
+Similarly, any data returned by the server running at port 8080 is written back to the client over the socket with TLS.
+
+## Example: Modular TLS/SSL for webservers
+
+Start with running [any webserver](https://gist.github.com/willurd/5720255) at 8080 at the local-loopback address (127.0.0.1):
+
+    php -S 127.0.0.1:8080
+
+Then run the TLS server at any/all interface(s) at the default HTTPS port (0.0.0.0:443), and then pipe incoming connections to the local-loopback device at the alternative HTTP port (127.0.0.1:8080).
+
+    [sudo] openssl-server -key key.pem -cert cert.pem -l 0.0.0.0:443 127.0.0.1:8080
+
+If the TLS-certificate is self-signed, then you must add this certificate as an exception in order to continue for testing purposes.
+For instance, to test the webserver over HTTPS, use curl:
+
+    curl --insecure https://localhost:443/
+
+If the webserver is supposed to be HTTPS-only, then a redirect from http:// to https:// is in order.
+So an additional webserver with a redirect must listen at 0.0.0.0:80.
+
+    cat <<EOF >redirect-to-https.php && [sudo] php -S 127.0.0.1:80
+    <?php
+    header('HTTP/1.1 302 Found');
+    header('Location: https://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI']);
+    ?>
+    EOF
+
+Of course, you can also simply run the webserver on the HTTP port (:80) directly, and do a conditional redirect to HTTPS (:443) in the application code (i.e. in PHP test for: `empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === "off"`).
+
+## `openssl-server --help`
+
+    Usage: openssl-server [OPTIONS] [target-address]
+    
+    Accepts incoming client sockets with TLS, and pipes the decrypted data to the
+    given target address (bidirectional). Target address defaults to 127.0.0.1, and
+    the set or default value of the bind port.
+    
+    OPTIONS
+      -cert <file>          Path to certificate file (defaults to cert.pem).
+      -key <file>           Path to key file (defaults to key.pem).
+      -b,--bind <address>   Bind to the given address (defaults to 127.0.0.1:4433).
+      -h,--help             Show this help.
+    
+    Formatting:
+      address = {host:port,host,:port,port}
+    
+    Hint:
+      Use host 0.0.0.0 for any/all interfaces (public).
+      Use host 127.0.0.1 for local-loopback only (private).
+    
+    EXAMPLES
+      Generate a self-signed certificate:
+      > openssl req -x509 -days 36500 -subj '/CN=localhost' -nodes -newkey rsa:4096 
+      -keyout key.pem -out cert.pem
+    
+      Connect with openssl-server instance (using TLS):
+      > openssl s_client -connect 127.0.0.1:4433 -quiet
+    
+    
+
+## TODO
+
+ - Authentication feature, to allow only clients with an authorized certificate.
+ - IPv6 addresses are not yet supported.
+ - Extensive testing of handling unexpected errors.
+
+
