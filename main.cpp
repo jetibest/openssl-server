@@ -48,7 +48,7 @@ sockaddr_in create_sockaddr(std::string host, int port)
 static void signal_handler(int _)
 {
 	(void)_; // disable warning unused variable
-	std::cout << "Caught signal (" << _ << ")." << std::endl;
+	std::cerr << "Caught signal (" << _ << ")." << std::endl;
 	connected = 0;
 }
 
@@ -111,12 +111,35 @@ std::string ssl_error_to_string(int ssl_error)
 
 void print_help()
 {
-	std::cout << "TODO: usage and help not implemented yet" << std::endl;
-	
-	// feature:
-	// if opt_target_port is 0, then write to stdout, and read from stdin instead of a socket
-	// this also automatically means that we will only accept at most 1 socket at a time
-	
+	std::cout
+		<< "Usage: openssl-server [OPTIONS] [target-address]" << std::endl
+		<< "" << std::endl
+		<< "Accepts incoming client sockets with TLS, and pipes the decrypted data to the" << std::endl
+		<< "given target address (bidirectional). Target address defaults to 127.0.0.1, and" << std::endl
+		<< "the set or default value of the bind port." << std::endl
+		<< "" << std::endl
+		<< "OPTIONS" << std::endl
+		<< "  -cert <file>          Path to certificate file (defaults to cert.pem)." << std::endl
+		<< "  -key <file>           Path to key file (defaults to key.pem)." << std::endl
+		<< "  -b,--bind <address>   Bind to the given address (defaults to 127.0.0.1:4433)." << std::endl
+		<< "  -h,--help             Show this help." << std::endl
+		<< "" << std::endl
+		<< "Formatting:" << std::endl
+		<< "  address = {host:port,host,:port,port}" << std::endl
+		<< "" << std::endl
+		<< "Hint:" << std::endl
+		<< "  Use host 0.0.0.0 for any/all interfaces (public)." << std::endl
+		<< "  Use host 127.0.0.1 for local-loopback only (private)." << std::endl
+		<< "" << std::endl
+		<< "EXAMPLES" << std::endl
+		<< "  Generate a self-signed certificate:" << std::endl
+		<< "  > openssl req -x509 -days 36500 -subj '/CN=localhost' -nodes -newkey rsa:4096 " << std::endl
+		<< "  -keyout key.pem -out cert.pem" << std::endl
+		<< "" << std::endl
+		<< "  Connect with openssl-server instance (using TLS):" << std::endl
+		<< "  > openssl s_client -connect 127.0.0.1:4433 -quiet" << std::endl
+		<< "" << std::endl
+		<< std::endl;
 }
 
 int child(int server_fd, SSL_CTX * sslctx, options_s options)
@@ -200,13 +223,20 @@ int child(int server_fd, SSL_CTX * sslctx, options_s options)
 			int ret = SSL_read(ssl, buffer, BUFFER_SIZE);
 			if(ret > 0)
 			{
-				write(clientfd_out, buffer, ret);
+				if(write(clientfd_out, buffer, ret) == -1)
+				{
+					die("write()");
+				}
 			}
 			else
 			{
 				int err = SSL_get_error(ssl, ret);
 				
-				if(!(err == SSL_ERROR_NONE || err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE || err == SSL_ERROR_ZERO_RETURN))
+				if(err == SSL_ERROR_ZERO_RETURN)
+				{
+					connected = 0;
+				}
+				else if(!(err == SSL_ERROR_NONE || err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE))
 				{
 					die(ssl_error_to_string(err));
 				}
@@ -283,6 +313,7 @@ int main(int argc, char * argv[])
 			if(arg == "-h" || arg == "--help")
 			{
 				print_help();
+				return 0;
 			}
 			else if(arg == "-cert")
 			{
@@ -302,14 +333,42 @@ int main(int argc, char * argv[])
 				}
 				options.key_file = argv[i + 1];
 			}
-			else if(arg == "-p" || arg == "--port")
+			else if(arg == "-l" || arg == "--listen")
 			{
 				if(i + 1 == argc)
 				{
-					die(std::string("") + "Invalid usage. Expected value for option. Use: " + arg + " <port>. Defaults to: " + arg + " \"" + std::to_string(options.listen_port) + "\"");
+					die(std::string("") + "Invalid usage. Expected value for option. Use: " + arg + " [host][:port]. Defaults to: " + arg + " \"" + options.listen_host + ":" + std::to_string(options.listen_port) + "\"");
 					return 1;
 				}
-				options.listen_port = std::stoi(std::string(argv[i+1]));
+				std::string addr = argv[i + 1];
+				if(addr.length() != 0)
+				{
+					size_t index = addr.find(':');
+					if(index == std::string::npos)
+					{
+						if(arg.find_first_not_of("0123456789") == std::string::npos)
+						{
+							options.listen_port = std::stoi(addr);
+						}
+						else
+						{
+							options.listen_host = addr;
+						}
+					}
+					else
+					{
+						std::string listen_host = addr.substr(0, index);
+						std::string listen_port = addr.substr(index + 1);
+						
+						// could be formatted as :1234 (no host, but : prefix)
+						if(listen_host.length() != 0)
+						{
+							options.listen_host = listen_host;
+						}
+						
+						options.listen_port = std::stoi(listen_port);
+					}
+				}
 			}
 			else
 			{
@@ -337,6 +396,7 @@ int main(int argc, char * argv[])
 						// assume listen port as target port value if port was omitted
 						options.port = options.listen_port;
 					}
+					options.host = arg;
 				}
 			}
 			else
@@ -395,6 +455,17 @@ int main(int argc, char * argv[])
 	fd_set readfds;
 	FD_ZERO(&readfds);
 	FD_SET(server_fd, &readfds);
+	
+	std::cerr << "Listening on " << options.listen_host << ":" << options.listen_port << " for incoming connections..." << std::endl;
+	std::cerr << "Forwarding incoming connections to: ";
+	if(options.port == 0)
+	{
+		std::cerr << "stdin/stdout" << std::endl;
+	}
+	else
+	{
+		std::cerr << options.host << ":" << options.port << std::endl;
+	}
 	
 	while(connected == 1)
 	{
