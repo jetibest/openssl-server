@@ -23,20 +23,28 @@ static volatile sig_atomic_t connected = 1;
 
 struct options_s
 {
+    int min_proto_version;
 	char listen_host[256];
 	int listen_port;
 	char host[256];
 	int port;
 	char cert_file[4096];
 	char key_file[4096];
+    int verify;
+    char ca_file[4096];
+    char ca_path[4096];
 };
 struct options_s options_default = {
+    0,
     "127.0.0.1",
     4433,
     "127.0.0.1",
     0,
     "cert.pem",
-    "key.pem"
+    "key.pem",
+    0,
+    "",
+    "/etc/ssl/certs:/etc/pki/tls/certs"
 };
 typedef struct options_s options;
 
@@ -79,13 +87,26 @@ void print_help()
 		"the set or default value of the bind port.\n"
 		"\n"
 		"OPTIONS\n"
+        "  -h,--help             Show this help.\n"
+        "  -b,--bind <address>   Bind to the given address (defaults to %s:%d).\n"
+        "\n"
 		"  -cert <file>          Path to certificate file (defaults to %s).\n"
 		"  -key <file>           Path to key file (defaults to %s).\n"
-		"  -b,--bind <address>   Bind to the given address (defaults to %s:%d).\n"
-		"  -h,--help             Show this help.\n"
+        "  -verify               Client must send a client certificate.\n"
+        "  -verify_return_error  Verify client certificate, or handshake failure.\n"
+        "  -CAfile <file>        Path to CA bundle file for verify.\n"
+        "  -CApath <path>        CA certificates directory for verify. Uses the first\n"
+        "                        path in a colon delimited string that exists.\n"
+        "                        Defaults to: %s\n"
+#ifdef TLS1_2_VERSION
+        "  -tls1_2               Enforce a minimum protocol version of TLS 1.2.\n"
+#endif
+#ifdef TLS1_3_VERSION
+        "  -tls1_3               Enforce a minimum protocol version of TLS 1.3.\n"
+#endif
 		"\n"
 		"Formatting:\n"
-		"  address = {host:port,host,:port,port}\n"
+		"  address = {host:port|host|:port|port}\n"
 		"\n"
 		"Hint:\n"
 		"  Use host 0.0.0.0 for any/all interfaces (public).\n"
@@ -101,10 +122,11 @@ void print_help()
 		"\n"
 		"\n",
          options_default.host,
-         options_default.cert_file,
-         options_default.key_file,
          options_default.listen_host,
          options_default.listen_port,
+         options_default.cert_file,
+         options_default.key_file,
+         options_default.ca_path,
          options_default.listen_host,
          options_default.listen_port
     );
@@ -310,24 +332,65 @@ int main(int argc, char * argv[])
 				print_help();
 				return 0;
 			}
-			else if(strcmp(arg, "-cert") == 0)
+			else if(strcmp(arg, "-cert") == 0 || strcmp(arg, "--cert") == 0)
 			{
 				if(i + 1 == argc)
 				{
 					die("error: Invalid usage. Expected value for option. Use: %s <file>. Defaults to: %s \"%s\".", arg, arg, options_default.cert_file);
 					return 1;
 				}
-				strcpy(opts.cert_file, argv[i + 1]);
+				strcpy(opts.cert_file, argv[++i]);
 			}
-			else if(strcmp(arg, "-key") == 0)
+			else if(strcmp(arg, "-key") == 0 || strcmp(arg, "--key") == 0)
 			{
 				if(i + 1 == argc)
 				{
 					die("error: Invalid usage. Expected value for option. Use: %s <file>. Defaults to: %s \"%s\".", arg, arg, options_default.key_file);
 					return 1;
 				}
-				strcpy(opts.key_file, argv[i + 1]);
+				strcpy(opts.key_file, argv[++i]);
 			}
+			else if(strcmp(arg, "-verify") == 0 || strcmp(arg, "--verify") == 0)
+            {
+                if(opts.verify == 0)
+                {
+                    opts.verify = 1;
+                }
+            }
+			else if(strcmp(arg, "-verify_return_error") == 0 || strcmp(arg, "--verify-return-error") == 0)
+            {
+                opts.verify = 2;
+            }
+            else if(strcmp(arg, "-CAfile") == 0 || strcmp(arg, "--ca-file") == 0)
+            {
+                if(i + 1 == argc)
+                {
+                    die("error: Invalid usage. Expected value for option. Use: %s <file>. Defaults to: %s \"%s\".", arg, arg, options_default.ca_file);
+                    return 1;
+                }
+                strcpy(opts.ca_file, argv[++i]);
+            }
+            else if(strcmp(arg, "-CApath") == 0 || strcmp(arg, "--ca-path") == 0)
+            {
+                if(i + 1 == argc)
+                {
+                    die("error: Invalid usage. Expected value for option. Use: %s <path>. Defaults to: %s \"%s\".", arg, arg, options_default.ca_path);
+                    return 1;
+                }
+                strcpy(opts.ca_path, argv[++i]);
+            }
+#ifdef TLS1_2_VERSION
+            else if(strcmp(arg, "-tls1_2") == 0 || strcmp(arg, "--tls1_2") == 0)
+            {
+                opts.min_proto_version = TLS1_2_VERSION;
+            }
+#endif
+#ifdef TLS1_3_VERSION
+            else if(strcmp(arg, "-tls1_3") == 0 || strcmp(arg, "--tls1_3") == 0)
+            {
+                opts.min_proto_version = TLS1_3_VERSION;
+            }
+#endif
 			else if(strcmp(arg, "-b") == 0 || strcmp(arg, "--bind") == 0)
 			{
 				if(i + 1 == argc)
@@ -335,7 +398,7 @@ int main(int argc, char * argv[])
 					die("error: Invalid usage. Expected value for option. Use: %s [host][:port]. Defaults to: %s \"%s:%d\"", arg, arg, opts.listen_host, opts.listen_port);
 					return 1;
 				}
-				char * addr = argv[i + 1];
+				char * addr = argv[++i];
 				if(addr[0] != '\0')
 				{
                     char * index = strchr(addr, ':');
@@ -414,9 +477,52 @@ int main(int argc, char * argv[])
 	
 	// Create SSL context:
 	SSL_CTX * sslctx = SSL_CTX_new(TLS_server_method());
-	SSL_CTX_set_options(sslctx, SSL_OP_SINGLE_DH_USE);
+    
+    if(opts.min_proto_version != 0)
+    {
+        // Require a minimum TLS version:
+        SSL_CTX_set_min_proto_version(sslctx, opts.min_proto_version);
+        
+        fprintf(stderr, "info: Requiring minimum version: %d\n", opts.min_proto_version);
+    }
+    
+    if(opts.verify != 0)
+    {
+        // Require client to send certificate as well:
+        
+        // set verify or fail if no peer cert, with default NULL callback
+        SSL_CTX_set_verify(sslctx, opts.verify == 1 ? SSL_VERIFY_PEER : SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+        
+        // find the first path that actually exists, if multiple paths are given
+        char * s = opts.ca_path;
+        char * index = strchr(s, ':');
+        if(index != NULL)
+        {   
+            *index = '\0';
+            while(access(s, F_OK) == -1)
+            {   
+                if((index = strchr(s = index + 1, ':')) == NULL) break;
+                *index = '\0';
+            }
+            strcpy(opts.ca_path, s);
+        }
+        
+        fprintf(stderr, "info: Using CAfile: %s\n", opts.ca_file);
+        fprintf(stderr, "info: Using CApath: %s\n", opts.ca_path);
+        
+        // set ca_file and ca_path (if empty, file/path is ignored -> NULL)
+        if(SSL_CTX_load_verify_locations(sslctx, opts.ca_file[0] == '\0' ? NULL : opts.ca_file, opts.ca_path[0] == '\0' ? NULL : opts.ca_path) != 1)
+        {
+            die("error: SSL_CTX_load_verify_locations(): CAfile = %s, CApath = %s", opts.ca_file, opts.ca_path);
+        }
+    }
+    
 	// SSL_CTX_set_mode(sslctx, SSL_MODE_AUTO_RETRY);
+	
+	fprintf(stderr, "info: Using cert file: %s\n", opts.cert_file);
 	int use_cert = SSL_CTX_use_certificate_file(sslctx, opts.cert_file, SSL_FILETYPE_PEM);
+    
+    fprintf(stderr, "info: Using key file: %s\n", opts.key_file);
 	int use_prv = SSL_CTX_use_PrivateKey_file(sslctx, opts.key_file, SSL_FILETYPE_PEM);
 	
     // Create socket server:

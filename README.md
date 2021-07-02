@@ -14,13 +14,22 @@ Modular TLS wrapper, a functional version of openssl s_server (for Linux).
     the set or default value of the bind port.
     
     OPTIONS
+      -h,--help             Show this help.
+      -b,--bind <address>   Bind to the given address (defaults to 127.0.0.1:4433).
+    
       -cert <file>          Path to certificate file (defaults to cert.pem).
       -key <file>           Path to key file (defaults to key.pem).
-      -b,--bind <address>   Bind to the given address (defaults to 127.0.0.1:4433).
-      -h,--help             Show this help.
+      -verify               Client must send a client certificate.
+      -verify_return_error  Verify client certificate, or handshake failure.
+      -CAfile <file>        Path to CA bundle file for verify.
+      -CApath <path>        CA certificates directory for verify. Uses the first
+                            path in a colon delimited string that exists.
+                            Defaults to: /etc/ssl/certs:/etc/pki/tls/certs
+      -tls1_2               Enforce a minimum protocol version of TLS 1.2.
+      -tls1_3               Enforce a minimum protocol version of TLS 1.3.
     
     Formatting:
-      address = {host:port,host,:port,port}
+      address = {host:port|host|:port|port}
     
     Hint:
       Use host 0.0.0.0 for any/all interfaces (public).
@@ -34,7 +43,7 @@ Modular TLS wrapper, a functional version of openssl s_server (for Linux).
       Connect with openssl-server instance (using TLS):
       > openssl s_client -connect 127.0.0.1:4433 -quiet
     
-    
+	
 
 ## Example: Basic usage
 
@@ -94,7 +103,6 @@ Of course, you can also simply run the webserver on the HTTP port (:80) directly
 
 ## TODO
 
- - Authentication feature, to allow only clients with an authorized certificate.
  - IPv6 addresses are not yet supported.
  - Extensive testing of handling unexpected errors.
 
