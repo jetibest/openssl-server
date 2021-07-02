@@ -524,9 +524,17 @@ int main(int argc, char * argv[])
 	
 	fprintf(stderr, "info: Using cert file: %s\n", opts.cert_file);
 	int use_cert = SSL_CTX_use_certificate_file(sslctx, opts.cert_file, SSL_FILETYPE_PEM);
+    if(use_cert != 1)
+    {
+        die("error: SSL_CTX_use_certificate_file(): cert = %s", opts.cert_file);
+    }
     
     fprintf(stderr, "info: Using key file: %s\n", opts.key_file);
 	int use_prv = SSL_CTX_use_PrivateKey_file(sslctx, opts.key_file, SSL_FILETYPE_PEM);
+    if(use_prv != 1)
+    {
+        die("error: SSL_CTX_use_PrivateKey_file(): key = %s", opts.key_file);
+    }
 	
     // Create socket server:
 	int server_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
