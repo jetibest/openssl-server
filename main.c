@@ -119,6 +119,9 @@ void print_help()
 		"\n"
 		"  Connect with openssl-server instance (using TLS):\n"
 		"  > openssl s_client -connect %s:%d -quiet\n"
+        "\n"
+        "  Enable HTTPS for a HTTP webserver running on port 80:\n"
+        "  > openssl-server --bind 0.0.0.0:443 80\n"
 		"\n"
 		"\n",
          options_default.host,

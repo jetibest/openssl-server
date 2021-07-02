@@ -43,7 +43,8 @@ Modular TLS wrapper, a functional version of openssl s_server (for Linux).
       Connect with openssl-server instance (using TLS):
       > openssl s_client -connect 127.0.0.1:4433 -quiet
     
-	
+      Enable HTTPS for a HTTP webserver running on port 80:
+      > openssl-server --bind 0.0.0.0:443 80
 
 ## Example: Basic usage
 
