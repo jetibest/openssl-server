@@ -1,2 +1,2 @@
 #!/bin/bash
-gcc -L/usr/lib -lssl -lcrypto main.c -o openssl-server
+gcc -L/usr/lib main.c -lssl -lcrypto -o openssl-server
